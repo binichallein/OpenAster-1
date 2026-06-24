@@ -1,0 +1,22 @@
+text:
+  lm_eval_tasks:
+    - mmlu
+    - ceval-valid
+    - cmmlu
+    - openbookqa
+    - arc_easy
+    - arc_challenge
+    - hellaswag
+    - boolq
+    - leaderboard_bbh
+math:
+  generation_tasks:
+    - gsm8k
+    - math500
+vision:
+  lmms_eval_tasks:
+    - mme
+    - pope
+    - scienceqa_img
+    - textvqa
+    - mmbench_en_dev

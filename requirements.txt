@@ -1,0 +1,16 @@
+accelerate
+datasets
+evaluate
+huggingface_hub
+lm_eval
+modelscope-hub
+numpy
+opencv-python
+pillow
+pyyaml
+safetensors
+sentencepiece
+torch
+tqdm
+transformers
+vllm

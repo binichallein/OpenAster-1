@@ -1,0 +1,31 @@
+model:
+  architecture: qwen3_moe_like
+  total_parameters: 2.0e9
+  active_parameters: 1.3e9
+  tokenizer: Qwen3.5-4B-compatible
+  max_position_embeddings:
+    scratch: 32768
+    yarn_32k: 32768
+    yarn_64k: 65536
+    yarn_128k: 131072
+
+data:
+  scratch_20b:
+    total_tokens: 20000000000
+    sources:
+      dclm_edu: 4000000000
+      opencsg_fineweb_edu_45: 5000000000
+      finemath_4plus: 2000000000
+      fineweb_edu_en: 4000000000
+      chinese_fineweb_edu: 4000000000
+      pile_deduplicated: 1000000000
+  continued_pretrain_60b:
+    total_tokens: 60000000000
+    note: release pending
+
+optimization:
+  precision: bf16
+  sequence_parallel: true
+  tensor_parallel_size: 1
+  pipeline_parallel_size: 1
+  distributed_backend: nccl
