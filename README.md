@@ -17,8 +17,8 @@ OpenAster-1 is a fully open 2B-scale Mixture-of-Experts language model project. 
 | Model | Type | Hugging Face | ModelScope |
 | --- | --- | --- | --- |
 | OpenAster1-4k-base | 4K text base | [binichallein/OpenAster1-4k-base](https://huggingface.co/binichallein/OpenAster1-4k-base) | [TYFTYF/OpenAster1-4k-base](https://www.modelscope.cn/models/TYFTYF/OpenAster1-4k-base) |
-| OpenAster1-128k | 128K text base | [binichallein/OpenAster1-128k](https://huggingface.co/binichallein/OpenAster1-128k) | [TYFTYF/OpenAster1-128k](https://www.modelscope.cn/models/TYFTYF/OpenAster1-128k) |
-| OpenAster1-Math | math SFT | [binichallein/OpenAster1-Math](https://huggingface.co/binichallein/OpenAster1-Math) | [TYFTYF/OpenAster1-Math](https://www.modelscope.cn/models/TYFTYF/OpenAster1-Math) |
+| OpenAster1-128k-base | 128K text base | [binichallein/OpenAster1-128k-base](https://huggingface.co/binichallein/OpenAster1-128k-base) | [TYFTYF/OpenAster1-128k-base](https://www.modelscope.cn/models/TYFTYF/OpenAster1-128k-base) |
+| OpenAster1-math | math SFT | [binichallein/OpenAster1-math](https://huggingface.co/binichallein/OpenAster1-math) | [TYFTYF/OpenAster1-math](https://www.modelscope.cn/models/TYFTYF/OpenAster1-math) |
 | OpenAster1-VL | vision instruction tuned | [binichallein/OpenAster1-VL](https://huggingface.co/binichallein/OpenAster1-VL) | [TYFTYF/OpenAster1-VL](https://www.modelscope.cn/models/TYFTYF/OpenAster1-VL) |
 
 ## Data
@@ -35,7 +35,7 @@ The 20B mix contains DCLM Edu, OpenCSG FineWeb Edu Chinese 4/5, FineMath 4+, Fin
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model_id = "binichallein/OpenAster1-128k"
+model_id = "binichallein/OpenAster1-128k-base"
 tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
@@ -56,7 +56,7 @@ print(tokenizer.decode(outputs[0][inputs.input_ids.shape[-1]:], skip_special_tok
 Release scripts are in `training/`:
 
 - `training/pretrain/run_pretrain_megatron.sh`: scratch/continued pretraining and YaRN context extension entry point.
-- `training/post_training/run_math_sft.sh`: math SFT entry point for OpenAster1-Math.
+- `training/post_training/run_math_sft.sh`: math SFT entry point for OpenAster1-math.
 - `training/post_training/run_text_rl_diagnostics.sh`: text-only RL diagnostic branches.
 - `training/vision/run_llava_style_vision_tuning.sh`: LLaVA-style vision tuning.
 
@@ -81,8 +81,8 @@ OpenAster-1 是一个完全开源的 2B 级 MoE 大语言模型项目。我们�
 | 模型 | 类型 | Hugging Face | ModelScope |
 | --- | --- | --- | --- |
 | OpenAster1-4k-base | 4K 文本基座 | [binichallein/OpenAster1-4k-base](https://huggingface.co/binichallein/OpenAster1-4k-base) | [TYFTYF/OpenAster1-4k-base](https://www.modelscope.cn/models/TYFTYF/OpenAster1-4k-base) |
-| OpenAster1-128k | 128K 文本基座 | [binichallein/OpenAster1-128k](https://huggingface.co/binichallein/OpenAster1-128k) | [TYFTYF/OpenAster1-128k](https://www.modelscope.cn/models/TYFTYF/OpenAster1-128k) |
-| OpenAster1-Math | 数学 SFT | [binichallein/OpenAster1-Math](https://huggingface.co/binichallein/OpenAster1-Math) | [TYFTYF/OpenAster1-Math](https://www.modelscope.cn/models/TYFTYF/OpenAster1-Math) |
+| OpenAster1-128k-base | 128K 文本基座 | [binichallein/OpenAster1-128k-base](https://huggingface.co/binichallein/OpenAster1-128k-base) | [TYFTYF/OpenAster1-128k-base](https://www.modelscope.cn/models/TYFTYF/OpenAster1-128k-base) |
+| OpenAster1-math | 数学 SFT | [binichallein/OpenAster1-math](https://huggingface.co/binichallein/OpenAster1-math) | [TYFTYF/OpenAster1-math](https://www.modelscope.cn/models/TYFTYF/OpenAster1-math) |
 | OpenAster1-VL | 视觉指令微调 | [binichallein/OpenAster1-VL](https://huggingface.co/binichallein/OpenAster1-VL) | [TYFTYF/OpenAster1-VL](https://www.modelscope.cn/models/TYFTYF/OpenAster1-VL) |
 
 ### 数据

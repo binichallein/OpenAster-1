@@ -3,8 +3,8 @@
 ## Weights
 
 - `OpenAster1-4k-base`: 4K text base model before context extension.
-- `OpenAster1-128k`: 128K text base model.
-- `OpenAster1-Math`: math SFT checkpoint based on the 128K base.
+- `OpenAster1-128k-base`: 128K text base model.
+- `OpenAster1-math`: math SFT checkpoint based on the 128K base.
 - `OpenAster1-VL`: LLaVA-style vision tuned checkpoint.
 
 ## Data
