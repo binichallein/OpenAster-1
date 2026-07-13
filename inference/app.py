@@ -681,6 +681,19 @@ HTML = r"""<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OpenAster1 Inference Studio</title>
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
   <style>
     :root {
       color-scheme: light;
@@ -818,6 +831,7 @@ HTML = r"""<!doctype html>
     .turn.user .bubble { border-color: #bfd0f7; background: var(--blue-soft); }
     .turn.assistant .bubble { border-color: #b9dfcf; background: #fbfffd; }
     .turn.error .bubble { border-color: #f3b5c2; background: var(--red-soft); color: #8d1632; }
+    .bubble mjx-container[display="true"] { margin: .7em 0; overflow-x: auto; overflow-y: hidden; }
     .cursor::after { content: ""; display: inline-block; width: 7px; height: 15px; margin-left: 3px; vertical-align: -2px; background: var(--green); animation: blink .8s steps(1) infinite; }
     @keyframes blink { 50% { opacity: 0; } }
     .composer-wrap { padding: 14px clamp(18px, 4vw, 62px) 16px; border-top: 1px solid var(--line); background: var(--surface); }
@@ -1032,6 +1046,15 @@ HTML = r"""<!doctype html>
       return { turn, bubble };
     }
 
+    async function typesetMath(bubble) {
+      if (!window.MathJax || typeof window.MathJax.typesetPromise !== "function") return;
+      try {
+        await window.MathJax.typesetPromise([bubble]);
+      } catch (error) {
+        console.warn("MathJax typesetting failed", error);
+      }
+    }
+
     function clearConversation(clearImage = true) {
       history.length = 0;
       imageTurn = null;
@@ -1150,6 +1173,7 @@ HTML = r"""<!doctype html>
         pending.bubble.classList.remove("cursor");
         if (!currentText.trim()) throw new Error("The model returned an empty response.");
         history.push({ role: "assistant", content: currentText.trim() });
+        await typesetMath(pending.bubble);
         regenerateButton.disabled = false;
         updateContextStatus(doneMeta);
         setRuntime("ready", "ready");
@@ -1159,6 +1183,7 @@ HTML = r"""<!doctype html>
           if (currentText.trim()) {
             history.push({ role: "assistant", content: currentText.trim() });
             pending.bubble.textContent = currentText.trim();
+            await typesetMath(pending.bubble);
           } else {
             history.pop();
             pending.turn.remove();

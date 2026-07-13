@@ -126,3 +126,18 @@ def test_error_event_is_newline_delimited_json() -> None:
 
 def test_hidden_empty_state_has_explicit_display_override() -> None:
     assert ".empty-state[hidden] { display: none; }" in HTML
+
+
+def test_gui_configures_mathjax_for_inline_and_display_tex() -> None:
+    assert "window.MathJax" in HTML
+    assert "inlineMath: [['\\\\(', '\\\\)']]" in HTML
+    assert "displayMath: [['\\\\[', '\\\\]']]" in HTML
+    assert "tex-chtml.js" in HTML
+
+
+def test_gui_typesets_completed_assistant_math_without_html_injection() -> None:
+    assert "async function typesetMath(bubble)" in HTML
+    assert "await window.MathJax.typesetPromise([bubble])" in HTML
+    assert "await typesetMath(pending.bubble)" in HTML
+    assert "bubble.textContent = text" in HTML
+    assert "bubble.innerHTML" not in HTML
