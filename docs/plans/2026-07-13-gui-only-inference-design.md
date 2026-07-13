@@ -56,4 +56,3 @@ The GUI keeps the existing public behavior:
 - Add a repository contract asserting that `inference/` contains only `app.py` and that no terminal demo is referenced.
 - Retain unit coverage for model loading, prompt rendering, context trimming, image handling, sampling, request validation, and GUI controls.
 - Run the full test suite, compile `app.py`, verify `python inference/app.py --help`, launch a local fake-engine server, and inspect desktop/mobile browser screenshots.
-

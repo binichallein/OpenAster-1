@@ -164,4 +164,3 @@ Start the HTTP server with a deterministic fake engine, open it in Playwright at
 **Step 4: Review and commit any verification-only corrections**
 
 Run `git status --short` and commit only corrections required by the verification results.
-
