@@ -4,21 +4,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from inference.inference import (
-    DEFAULT_TEXT_MODEL,
+from inference.app import (
     IMAGE_TOKEN,
     ContextLengthError,
     ModelLoaders,
     OpenAsterEngine,
     SamplingConfig,
-    build_parser,
     detect_model_kind,
     expand_image_tokens,
     fit_messages_to_context,
-    parse_repl_command,
     render_prompt,
     _run_seeded_generate,
-    update_sampling_config,
     validate_messages,
 )
 
@@ -374,81 +370,6 @@ def test_text_engine_rejects_image_before_generation() -> None:
                 image_turn=0,
             )
         )
-
-
-@pytest.mark.parametrize(
-    ("line", "expected"),
-    [
-        ("hello", None),
-        ("/clear", ("clear", "")),
-        ("/exit", ("exit", "")),
-        ("/params", ("params", "")),
-        ("/image /tmp/demo.jpg", ("image", "/tmp/demo.jpg")),
-        ("/system Be concise.", ("system", "Be concise.")),
-        ("/set temperature 0.2", ("set", "temperature 0.2")),
-    ],
-)
-def test_parse_repl_command(line: str, expected: tuple[str, str] | None) -> None:
-    assert parse_repl_command(line) == expected
-
-
-def test_cli_defaults_to_math_model_and_accepts_one_shot_vision() -> None:
-    parser = build_parser()
-    default_args = parser.parse_args([])
-    vision_args = parser.parse_args(
-        ["--model", "binichallein/OpenAster1-VL", "--prompt", "describe", "--image", "demo.jpg"]
-    )
-
-    assert DEFAULT_TEXT_MODEL == "binichallein/OpenAster1-math"
-    assert default_args.model == DEFAULT_TEXT_MODEL
-    assert vision_args.prompt == "describe"
-    assert vision_args.image == "demo.jpg"
-
-
-def test_cli_exposes_all_sampling_parameters() -> None:
-    args = build_parser().parse_args(
-        [
-            "--max-new-tokens",
-            "128",
-            "--temperature",
-            "0.4",
-            "--top-p",
-            "0.85",
-            "--top-k",
-            "32",
-            "--repetition-penalty",
-            "1.12",
-            "--seed",
-            "7",
-            "--context-tokens",
-            "8192",
-        ]
-    )
-
-    expected = {
-        "max_new_tokens": 128,
-        "temperature": 0.4,
-        "top_p": 0.85,
-        "top_k": 32,
-        "repetition_penalty": 1.12,
-        "seed": 7,
-        "context_tokens": 8192,
-    }
-    assert {key: getattr(args, key) for key in expected} == expected
-
-
-def test_repl_can_update_sampling_parameters_without_mutating_original() -> None:
-    original = SamplingConfig(temperature=0.7)
-
-    updated = update_sampling_config(original, "temperature 0.2")
-
-    assert updated.temperature == 0.2
-    assert original.temperature == 0.7
-
-
-def test_repl_rejects_unknown_sampling_parameter() -> None:
-    with pytest.raises(ValueError, match="Unknown sampling parameter"):
-        update_sampling_config(SamplingConfig(), "beam_size 4")
 
 
 def test_seeded_generation_sets_seed_without_forwarding_generator() -> None:
