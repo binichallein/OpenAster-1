@@ -38,51 +38,7 @@ Install the runtime dependencies:
 pip install -r requirements.txt
 ```
 
-The release keeps inference to two scripts. `inference/inference.py` provides one-shot and interactive terminal inference; `inference/app.py` launches the browser GUI. Both entry points auto-detect text (`Qwen3MoeForCausalLM`) and vision (`LlavaForConditionalGeneration`) checkpoints.
-
-### Terminal chat
-
-<p align="center">
-  <img src="assets/terminal-demo.gif" alt="OpenAster1-math terminal conversation" width="900">
-</p>
-
-This is a live SSH PTY recording of the public `binichallein/OpenAster1-math` checkpoint. The prompt is GSM8K test example 208; the model generates the complete solution in real time with `temperature=0.7`, `top_p=0.95`, and `seed=3`, reaching the correct answer `\boxed{76}`. No answer text is pre-rendered.
-
-Interactive OpenAster1-math chat:
-
-```bash
-python inference/inference.py --model binichallein/OpenAster1-math
-```
-
-One-shot deterministic generation:
-
-```bash
-python inference/inference.py \
-  --model binichallein/OpenAster1-math \
-  --prompt "Solve: 24 * 17" \
-  --temperature 0 \
-  --max-new-tokens 512
-```
-
-Run the 128K base checkpoint with the full context budget:
-
-```bash
-python inference/inference.py \
-  --model binichallein/OpenAster1-128k-base \
-  --context-tokens 131072
-```
-
-One-shot visual question answering:
-
-```bash
-python inference/inference.py \
-  --model binichallein/OpenAster1-VL \
-  --image /path/to/image.jpg \
-  --prompt "Describe this image." \
-  --temperature 0
-```
-
-The terminal REPL supports `/image PATH`, `/clear`, `/system TEXT`, `/params`, `/set KEY VALUE`, and `/exit`. Sampling flags include `--max-new-tokens`, `--temperature`, `--top-p`, `--top-k`, `--repetition-penalty`, `--seed`, `--context-tokens`, and `--thinking`.
+OpenAster provides one inference entry point: `inference/app.py`. It launches the browser GUI and automatically detects text (`Qwen3MoeForCausalLM`) and vision (`LlavaForConditionalGeneration`) checkpoints.
 
 ### Browser GUI
 
@@ -90,43 +46,27 @@ The terminal REPL supports `/image PATH`, `/clear`, `/system TEXT`, `/params`, `
   <img src="assets/gui-demo.gif" alt="OpenAster1-VL browser conversation" width="1000">
 </p>
 
-Launch text chat:
+Launch OpenAster1-math:
 
 ```bash
-python inference/app.py --model binichallein/OpenAster1-math --port 7860
+python inference/app.py --model binichallein/OpenAster1-math --port 7860 --open-browser
 ```
 
-Launch visual chat:
+Launch the 128K base model:
 
 ```bash
-python inference/app.py --model binichallein/OpenAster1-VL --host 0.0.0.0 --port 7860
+python inference/app.py --model binichallein/OpenAster1-128k-base --port 7860 --open-browser
+```
+
+Set **Context tokens** to `131072` in the GUI when the full 128K context budget is required.
+
+Launch OpenAster1-VL:
+
+```bash
+python inference/app.py --model binichallein/OpenAster1-VL --host 0.0.0.0 --port 7860 --open-browser
 ```
 
 Open `http://localhost:7860`. The GUI streams tokens, preserves multi-turn history, exposes the sampling controls above, and keeps one image attached across visual follow-up turns. Selecting a new image starts a new visual conversation. If a prompt approaches the selected context budget, the oldest complete user/assistant pairs are removed while the current turn and visual anchor turn are retained.
-
-<details>
-<summary>Direct Transformers API</summary>
-
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-model_id = "binichallein/OpenAster1-128k-base"
-tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    dtype="auto",
-    device_map="auto",
-    trust_remote_code=True,
-)
-
-messages = [{"role": "user", "content": "Give a short introduction to OpenAster-1."}]
-text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-inputs = tokenizer([text], return_tensors="pt").to(model.device)
-outputs = model.generate(**inputs, max_new_tokens=512)
-print(tokenizer.decode(outputs[0][inputs.input_ids.shape[-1]:], skip_special_tokens=True))
-```
-
-</details>
 
 ## Training
 
@@ -173,30 +113,20 @@ OpenAster-1 是一个完全开源的 2B 级 MoE 大语言模型项目。我们�
 
 ### 推理
 
-终端交互与视觉问答统一使用 `inference/inference.py`：
+文本与视觉模型统一使用浏览器 GUI：
 
 ```bash
-# 数学文本多轮对话
-python inference/inference.py --model binichallein/OpenAster1-math
+# 数学模型
+python inference/app.py --model binichallein/OpenAster1-math --port 7860 --open-browser
 
-# 单图视觉问答
-python inference/inference.py \
-  --model binichallein/OpenAster1-VL \
-  --image /path/to/image.jpg \
-  --prompt "请描述这张图片。"
+# 128K 文本基座
+python inference/app.py --model binichallein/OpenAster1-128k-base --port 7860 --open-browser
+
+# 视觉模型
+python inference/app.py --model binichallein/OpenAster1-VL --host 0.0.0.0 --port 7860 --open-browser
 ```
 
-浏览器 GUI 使用 `inference/app.py`：
-
-```bash
-# 文本 GUI
-python inference/app.py --model binichallein/OpenAster1-math --port 7860
-
-# 视觉 GUI
-python inference/app.py --model binichallein/OpenAster1-VL --host 0.0.0.0 --port 7860
-```
-
-两个入口都支持长对话和完整采样参数。对话超过设定上下文预算时，会按完整问答轮次从最早位置裁剪；视觉模式会保留带图轮次。更换图片会开始新的视觉会话。
+GUI 支持长对话、图片上传、thinking 开关和完整采样参数。运行 128K 模型时，可在界面中将 **Context tokens** 设为 `131072`。对话超过设定上下文预算时，会按完整问答轮次从最早位置裁剪；视觉模式会保留带图轮次，更换图片会开始新的视觉会话。
 
 ## License
 
