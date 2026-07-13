@@ -17,6 +17,7 @@ from inference.inference import (
     fit_messages_to_context,
     parse_repl_command,
     render_prompt,
+    _run_seeded_generate,
     update_sampling_config,
     validate_messages,
 )
@@ -448,3 +449,36 @@ def test_repl_can_update_sampling_parameters_without_mutating_original() -> None
 def test_repl_rejects_unknown_sampling_parameter() -> None:
     with pytest.raises(ValueError, match="Unknown sampling parameter"):
         update_sampling_config(SamplingConfig(), "beam_size 4")
+
+
+def test_seeded_generation_sets_seed_without_forwarding_generator() -> None:
+    calls: dict = {}
+
+    class InferenceMode:
+        def __enter__(self):
+            return None
+
+        def __exit__(self, *_args):
+            return False
+
+    class FakeTorchModule:
+        @staticmethod
+        def inference_mode():
+            return InferenceMode()
+
+    class GeneratingModel:
+        def generate(self, **kwargs):
+            calls["kwargs"] = kwargs
+
+    def set_seed(seed: int) -> None:
+        calls["seed"] = seed
+
+    _run_seeded_generate(
+        GeneratingModel(),
+        {"input_ids": "tokens"},
+        seed=2026,
+        torch_module=FakeTorchModule(),
+        seed_fn=set_seed,
+    )
+
+    assert calls == {"seed": 2026, "kwargs": {"input_ids": "tokens"}}

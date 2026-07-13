@@ -301,6 +301,25 @@ def _load_rgb_image(image: Any):
     raise TypeError("image must be a PIL image, file path, or encoded image bytes")
 
 
+def _run_seeded_generate(
+    model: Any,
+    generation_inputs: Mapping[str, Any],
+    *,
+    seed: int,
+    torch_module=None,
+    seed_fn: Callable[[int], None] | None = None,
+) -> None:
+    if torch_module is None:
+        import torch as torch_module
+    if seed_fn is None:
+        from transformers import set_seed
+
+        seed_fn = set_seed
+    seed_fn(seed)
+    with torch_module.inference_mode():
+        model.generate(**generation_inputs)
+
+
 class OpenAsterEngine:
     def __init__(
         self,
@@ -404,8 +423,6 @@ class OpenAsterEngine:
         system_prompt: str,
         thinking: bool,
     ) -> tuple[dict[str, Any], PromptResult]:
-        import torch
-
         sampling.validate()
         if self.kind == "text" and image is not None:
             raise ValueError("The loaded OpenAster checkpoint is text-only and cannot accept an image.")
@@ -468,10 +485,6 @@ class OpenAsterEngine:
             else self.tokenizer.eos_token_id
         )
         generation_inputs["eos_token_id"] = self.tokenizer.eos_token_id
-        generator_device = input_device if input_device.type == "cuda" else "cpu"
-        generation_inputs["generator"] = torch.Generator(device=generator_device).manual_seed(
-            sampling.seed
-        )
         return generation_inputs, prompt_result
 
     def stream(
@@ -519,8 +532,13 @@ class OpenAsterEngine:
 
         def generate() -> None:
             try:
-                with self._generation_lock, torch.inference_mode():
-                    self.model.generate(**generation_inputs)
+                with self._generation_lock:
+                    _run_seeded_generate(
+                        self.model,
+                        generation_inputs,
+                        seed=sampling.seed,
+                        torch_module=torch,
+                    )
             except BaseException as exc:
                 errors.put(exc)
                 streamer.end()
