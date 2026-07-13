@@ -42,9 +42,35 @@ OpenAster provides one inference entry point: `inference/app.py`. It launches th
 
 ### Browser GUI
 
+#### Vision
+
 <p align="center">
-  <img src="assets/gui-demo.gif" alt="OpenAster1-VL browser conversation" width="1000">
+  <img src="assets/gui-vision-demo.gif" alt="OpenAster1-VL visual conversation" width="1000">
 </p>
+
+This recording runs the public `binichallein/OpenAster1-VL` checkpoint with a real uploaded image and visual follow-up question.
+
+#### Text Thinking
+
+<p align="center">
+  <img src="assets/gui-text-thinking-demo.gif" alt="OpenAster1-4k-base text Thinking conversation" width="1000">
+</p>
+
+This recording runs the public `binichallein/OpenAster1-4k-base` checkpoint with Thinking enabled. The exact user prompt is `我想学习游泳，你能给我一些建议吗`.
+
+#### Math Reasoning
+
+<p align="center">
+  <img src="assets/gui-math-demo.gif" alt="OpenAster1-math GSM8K reasoning with rendered formulas" width="1000">
+</p>
+
+This recording runs the public `binichallein/OpenAster1-math` checkpoint on GSM8K test example 208 with `temperature=0.7`, `top_p=0.95`, and `seed=3`. The model derives the correct answer `76`, and the GUI renders the generated LaTeX equations and `\boxed{76}` after streaming completes.
+
+Launch the 4K base model:
+
+```bash
+python inference/app.py --model binichallein/OpenAster1-4k-base --port 7860 --open-browser
+```
 
 Launch OpenAster1-math:
 
@@ -116,6 +142,9 @@ OpenAster-1 是一个完全开源的 2B 级 MoE 大语言模型项目。我们�
 文本与视觉模型统一使用浏览器 GUI：
 
 ```bash
+# 4K 文本基座
+python inference/app.py --model binichallein/OpenAster1-4k-base --port 7860 --open-browser
+
 # 数学模型
 python inference/app.py --model binichallein/OpenAster1-math --port 7860 --open-browser
 
