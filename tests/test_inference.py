@@ -1,15 +1,23 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from inference.inference import (
+    DEFAULT_TEXT_MODEL,
     IMAGE_TOKEN,
     ContextLengthError,
+    ModelLoaders,
+    OpenAsterEngine,
     SamplingConfig,
+    build_parser,
     detect_model_kind,
     expand_image_tokens,
     fit_messages_to_context,
+    parse_repl_command,
     render_prompt,
+    update_sampling_config,
     validate_messages,
 )
 
@@ -36,6 +44,60 @@ class FakeTokenizer:
 
     def __call__(self, text: str, **_kwargs) -> FakeEncoding:
         return FakeEncoding(text)
+
+
+class FakeModel:
+    def __init__(self) -> None:
+        self.config = SimpleNamespace(
+            eos_token_id=2,
+            pad_token_id=0,
+            max_position_embeddings=4096,
+            use_cache=False,
+        )
+        self.eval_called = False
+
+    def eval(self):
+        self.eval_called = True
+        return self
+
+
+class LoaderRecorder:
+    def __init__(self, model_type: str) -> None:
+        self.model_type = model_type
+        self.calls: list[tuple[str, dict]] = []
+
+    def config(self, _model: str, **kwargs):
+        self.calls.append(("config", kwargs))
+        return SimpleNamespace(
+            model_type=self.model_type,
+            image_seq_length=576,
+            max_position_embeddings=131072,
+        )
+
+    def tokenizer(self, _model: str, **kwargs):
+        self.calls.append(("tokenizer", kwargs))
+        return FakeTokenizer()
+
+    def text_model(self, _model: str, **kwargs):
+        self.calls.append(("text_model", kwargs))
+        return FakeModel()
+
+    def vision_model(self, _model: str, **kwargs):
+        self.calls.append(("vision_model", kwargs))
+        return FakeModel()
+
+    def image_processor(self, _model: str, **kwargs):
+        self.calls.append(("image_processor", kwargs))
+        return object()
+
+    def loaders(self) -> ModelLoaders:
+        return ModelLoaders(
+            config=self.config,
+            tokenizer=self.tokenizer,
+            text_model=self.text_model,
+            vision_model=self.vision_model,
+            image_processor=self.image_processor,
+        )
 
 
 def test_detects_supported_model_families() -> None:
@@ -256,3 +318,133 @@ def test_context_fitting_rejects_current_turn_that_cannot_fit() -> None:
             context_tokens=6,
             max_new_tokens=2,
         )
+
+
+def test_engine_selects_text_model_loader() -> None:
+    recorder = LoaderRecorder("qwen3_moe")
+
+    engine = OpenAsterEngine.from_pretrained(
+        "text-model",
+        device="cpu",
+        dtype="float32",
+        loaders=recorder.loaders(),
+    )
+
+    assert engine.kind == "text"
+    assert engine.image_processor is None
+    assert "text_model" in [name for name, _kwargs in recorder.calls]
+    assert "vision_model" not in [name for name, _kwargs in recorder.calls]
+    assert engine.model.eval_called is True
+
+
+def test_engine_selects_vision_model_and_processor_loaders() -> None:
+    recorder = LoaderRecorder("llava")
+
+    engine = OpenAsterEngine.from_pretrained(
+        "vision-model",
+        device="cpu",
+        dtype="float32",
+        loaders=recorder.loaders(),
+    )
+
+    names = [name for name, _kwargs in recorder.calls]
+    assert engine.kind == "vision"
+    assert engine.image_seq_len == 576
+    assert "vision_model" in names
+    assert "image_processor" in names
+    assert "text_model" not in names
+
+
+def test_text_engine_rejects_image_before_generation() -> None:
+    recorder = LoaderRecorder("qwen3_moe")
+    engine = OpenAsterEngine.from_pretrained(
+        "text-model",
+        device="cpu",
+        dtype="float32",
+        loaders=recorder.loaders(),
+    )
+
+    with pytest.raises(ValueError, match="text-only"):
+        list(
+            engine.stream(
+                [{"role": "user", "content": "describe"}],
+                SamplingConfig(max_new_tokens=8, context_tokens=128),
+                image=object(),
+                image_turn=0,
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        ("hello", None),
+        ("/clear", ("clear", "")),
+        ("/exit", ("exit", "")),
+        ("/params", ("params", "")),
+        ("/image /tmp/demo.jpg", ("image", "/tmp/demo.jpg")),
+        ("/system Be concise.", ("system", "Be concise.")),
+        ("/set temperature 0.2", ("set", "temperature 0.2")),
+    ],
+)
+def test_parse_repl_command(line: str, expected: tuple[str, str] | None) -> None:
+    assert parse_repl_command(line) == expected
+
+
+def test_cli_defaults_to_math_model_and_accepts_one_shot_vision() -> None:
+    parser = build_parser()
+    default_args = parser.parse_args([])
+    vision_args = parser.parse_args(
+        ["--model", "binichallein/OpenAster1-VL", "--prompt", "describe", "--image", "demo.jpg"]
+    )
+
+    assert DEFAULT_TEXT_MODEL == "binichallein/OpenAster1-math"
+    assert default_args.model == DEFAULT_TEXT_MODEL
+    assert vision_args.prompt == "describe"
+    assert vision_args.image == "demo.jpg"
+
+
+def test_cli_exposes_all_sampling_parameters() -> None:
+    args = build_parser().parse_args(
+        [
+            "--max-new-tokens",
+            "128",
+            "--temperature",
+            "0.4",
+            "--top-p",
+            "0.85",
+            "--top-k",
+            "32",
+            "--repetition-penalty",
+            "1.12",
+            "--seed",
+            "7",
+            "--context-tokens",
+            "8192",
+        ]
+    )
+
+    expected = {
+        "max_new_tokens": 128,
+        "temperature": 0.4,
+        "top_p": 0.85,
+        "top_k": 32,
+        "repetition_penalty": 1.12,
+        "seed": 7,
+        "context_tokens": 8192,
+    }
+    assert {key: getattr(args, key) for key in expected} == expected
+
+
+def test_repl_can_update_sampling_parameters_without_mutating_original() -> None:
+    original = SamplingConfig(temperature=0.7)
+
+    updated = update_sampling_config(original, "temperature 0.2")
+
+    assert updated.temperature == 0.2
+    assert original.temperature == 0.7
+
+
+def test_repl_rejects_unknown_sampling_parameter() -> None:
+    with pytest.raises(ValueError, match="Unknown sampling parameter"):
+        update_sampling_config(SamplingConfig(), "beam_size 4")
