@@ -91,10 +91,12 @@ python inference/app.py --model binichallein/OpenAster1-128k-base --port 7860 --
 启动 OpenAster1-VL：
 
 ```bash
-python inference/app.py --model binichallein/OpenAster1-VL --host 0.0.0.0 --port 7860 --open-browser
+python inference/app.py --model binichallein/OpenAster1-VL --port 7860 --open-browser
 ```
 
 浏览器访问 `http://localhost:7860`。GUI 支持流式生成、长对话、图片上传、Thinking 开关和完整采样参数。对话接近上下文上限时，会优先移除最早的完整问答轮次，并保留当前轮次和视觉锚点轮次；选择新图片会开始新的视觉会话。
+
+内置服务不提供身份验证。仅在本地使用时请保持默认回环地址；如需开放到网络，应先配置带身份验证的反向代理。
 
 ## 训练
 

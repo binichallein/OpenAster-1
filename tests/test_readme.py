@@ -29,6 +29,13 @@ def test_readme_documents_text_and_vision_gui_commands() -> None:
     assert "python inference/app.py --model binichallein/OpenAster1-VL" in README
 
 
+def test_readmes_keep_the_unauthenticated_gui_on_loopback() -> None:
+    assert "--host 0.0.0.0" not in README
+    assert "--host 0.0.0.0" not in README_ZH
+    assert "does not provide authentication" in README
+    assert "不提供身份验证" in README_ZH
+
+
 def test_readme_documents_only_gui_inference() -> None:
     assert "inference/inference.py" not in README
     assert "assets/terminal-demo.gif" not in README

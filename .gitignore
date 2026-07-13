@@ -3,6 +3,12 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+.env
+.env.*
+!.env.example
+.secrets/
+*.pem
+*.key
 outputs/
 runs/
 logs/

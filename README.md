@@ -91,10 +91,12 @@ Set **Context tokens** to `131072` in the GUI when the full 128K context budget 
 Launch OpenAster1-VL:
 
 ```bash
-python inference/app.py --model binichallein/OpenAster1-VL --host 0.0.0.0 --port 7860 --open-browser
+python inference/app.py --model binichallein/OpenAster1-VL --port 7860 --open-browser
 ```
 
 Open `http://localhost:7860`. The GUI streams tokens, preserves multi-turn history, exposes the sampling controls above, and keeps one image attached across visual follow-up turns. Selecting a new image starts a new visual conversation. If a prompt approaches the selected context budget, the oldest complete user/assistant pairs are removed while the current turn and visual anchor turn are retained.
+
+The built-in server does not provide authentication. Keep the default loopback binding for local use; place an authenticated reverse proxy in front of it before exposing it to a network.
 
 ## Training
 
