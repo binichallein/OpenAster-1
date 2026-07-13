@@ -12,5 +12,5 @@ safetensors
 sentencepiece
 torch
 tqdm
-transformers
+transformers>=4.57.6
 vllm
