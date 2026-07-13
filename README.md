@@ -46,6 +46,8 @@ The release keeps inference to two scripts. `inference/inference.py` provides on
   <img src="assets/terminal-demo.gif" alt="OpenAster1-math terminal conversation" width="900">
 </p>
 
+This is a live SSH PTY recording of the public `binichallein/OpenAster1-math` checkpoint. The prompt is GSM8K test example 208; the model generates the complete solution in real time with `temperature=0.7`, `top_p=0.95`, and `seed=3`, reaching the correct answer `\boxed{76}`. No answer text is pre-rendered.
+
 Interactive OpenAster1-math chat:
 
 ```bash
