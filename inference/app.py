@@ -7,12 +7,13 @@ import json
 import os
 import queue
 import threading
+import time
 import webbrowser
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Callable, Iterator, Literal, Mapping, Sequence
+from typing import Any, Callable, Iterable, Iterator, Literal, Mapping, Sequence
 from urllib.parse import urlparse
 
 
@@ -675,6 +676,97 @@ def serialize_event(event_type: str, **payload: Any) -> bytes:
     ).encode("utf-8")
 
 
+class ReasoningStreamParser:
+    OPENING_MARKER = "<think>"
+    CLOSING_MARKER = "</think>"
+
+    def __init__(self, *, enabled: bool) -> None:
+        self.enabled = enabled
+        self._state = "opening" if enabled else "answer"
+        self._buffer = ""
+
+    def feed(self, text: str) -> list[tuple[str, str]]:
+        if not text:
+            return []
+        if self._state == "answer":
+            return [("answer", text)]
+
+        self._buffer += text
+        if self._state == "opening":
+            candidate = self._buffer.lstrip()
+            if not candidate or (
+                self.OPENING_MARKER.startswith(candidate)
+                and candidate != self.OPENING_MARKER
+            ):
+                return []
+            if candidate.startswith(self.OPENING_MARKER):
+                self._buffer = candidate[len(self.OPENING_MARKER) :]
+            self._state = "reasoning"
+
+        marker_index = self._buffer.find(self.CLOSING_MARKER)
+        if marker_index >= 0:
+            reasoning = self._buffer[:marker_index]
+            answer = self._buffer[marker_index + len(self.CLOSING_MARKER) :]
+            self._buffer = ""
+            self._state = "answer"
+            events: list[tuple[str, str]] = []
+            if reasoning:
+                events.append(("reasoning", reasoning))
+            events.append(("reasoning_done", ""))
+            if answer:
+                events.append(("answer", answer))
+            return events
+
+        keep = 0
+        max_prefix = min(len(self._buffer), len(self.CLOSING_MARKER) - 1)
+        for size in range(1, max_prefix + 1):
+            if self._buffer.endswith(self.CLOSING_MARKER[:size]):
+                keep = size
+        reasoning = self._buffer[:-keep] if keep else self._buffer
+        self._buffer = self._buffer[-keep:] if keep else ""
+        return [("reasoning", reasoning)] if reasoning else []
+
+    def finish(self) -> list[tuple[str, str]]:
+        if self._state == "answer":
+            return []
+        events: list[tuple[str, str]] = []
+        if self._state == "opening":
+            candidate = self._buffer.lstrip()
+            if candidate and not self.OPENING_MARKER.startswith(candidate):
+                events.append(("reasoning", self._buffer))
+        self._buffer = ""
+        self._state = "answer"
+        events.append(("reasoning_incomplete", ""))
+        return events
+
+
+def stream_generation_events(
+    chunks: Iterable[str],
+    *,
+    thinking: bool,
+    clock: Callable[[], float] = time.perf_counter,
+) -> Iterator[bytes]:
+    parser = ReasoningStreamParser(enabled=thinking)
+    started_at = clock()
+    for chunk in chunks:
+        for event_type, text in parser.feed(chunk):
+            if event_type in {"reasoning_done", "reasoning_incomplete"}:
+                elapsed = round(max(0.0, clock() - started_at), 1)
+                yield serialize_event(event_type, seconds=elapsed)
+            elif event_type == "reasoning":
+                yield serialize_event(event_type, text=text)
+            else:
+                yield serialize_event("token", text=text)
+    for event_type, text in parser.finish():
+        if event_type in {"reasoning_done", "reasoning_incomplete"}:
+            elapsed = round(max(0.0, clock() - started_at), 1)
+            yield serialize_event(event_type, seconds=elapsed)
+        elif event_type == "reasoning":
+            yield serialize_event(event_type, text=text)
+        else:
+            yield serialize_event("token", text=text)
+
+
 HTML = r"""<!doctype html>
 <html lang="en">
 <head>
@@ -831,6 +923,51 @@ HTML = r"""<!doctype html>
     .turn.user .bubble { border-color: #bfd0f7; background: var(--blue-soft); }
     .turn.assistant .bubble { border-color: #b9dfcf; background: #fbfffd; }
     .turn.error .bubble { border-color: #f3b5c2; background: var(--red-soft); color: #8d1632; }
+    .thinking-panel { margin: 0 0 12px; color: var(--muted); }
+    .thinking-summary {
+      width: fit-content;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      list-style: none;
+      cursor: pointer;
+      user-select: none;
+      color: #526173;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .thinking-summary::-webkit-details-marker { display: none; }
+    .thinking-summary::after {
+      content: "";
+      width: 6px;
+      height: 6px;
+      margin-left: 2px;
+      border-right: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      transform: rotate(45deg) translateY(-2px);
+      transition: transform .15s ease;
+    }
+    .thinking-panel[open] > .thinking-summary::after { transform: rotate(225deg) translate(-1px, -1px); }
+    .thinking-spinner {
+      width: 14px;
+      height: 14px;
+      flex: 0 0 auto;
+      border: 2px solid #d8deea;
+      border-top-color: var(--purple);
+      border-radius: 50%;
+      animation: spin .75s linear infinite;
+    }
+    .thinking-spinner[hidden] { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .thinking-copy {
+      margin: 9px 0 2px 6px;
+      padding: 1px 0 1px 14px;
+      border-left: 2px solid #d8deea;
+      color: #667488;
+      white-space: pre-wrap;
+    }
+    .answer-copy { color: var(--ink); white-space: pre-wrap; }
+    .answer-copy[hidden] { display: none; }
     .bubble mjx-container[display="true"] { margin: .7em 0; overflow-x: auto; overflow-y: hidden; }
     .cursor::after { content: ""; display: inline-block; width: 7px; height: 15px; margin-left: 3px; vertical-align: -2px; background: var(--green); animation: blink .8s steps(1) infinite; }
     @keyframes blink { 50% { opacity: 0; } }
@@ -988,8 +1125,7 @@ HTML = r"""<!doctype html>
     let imageTurn = null;
     let controller = null;
     let busy = false;
-    let currentBubble = null;
-    let currentText = "";
+    let clearingConversation = false;
 
     const byId = (id) => document.getElementById(id);
     const messagesEl = byId("messages");
@@ -1019,7 +1155,7 @@ HTML = r"""<!doctype html>
       byId("contextStatus").textContent = text;
     }
 
-    function addTurn(role, text, withImage = false) {
+    function addTurn(role, text, withImage = false, withThinking = false) {
       emptyState.hidden = true;
       const turn = document.createElement("article");
       turn.className = `turn ${role}`;
@@ -1039,11 +1175,56 @@ HTML = r"""<!doctype html>
       }
       const bubble = document.createElement("div");
       bubble.className = "bubble";
-      bubble.textContent = text;
+      let thinkingPanel = null;
+      let thinkingLabel = null;
+      let thinkingSpinner = null;
+      let reasoning = null;
+      let answer = bubble;
+      if (role === "assistant" && withThinking) {
+        const details = document.createElement("details");
+        details.className = "thinking-panel";
+        details.open = true;
+        const summary = document.createElement("summary");
+        summary.className = "thinking-summary";
+        const spinner = document.createElement("span");
+        spinner.className = "thinking-spinner";
+        spinner.setAttribute("aria-hidden", "true");
+        const label = document.createElement("span");
+        label.textContent = "思考中";
+        summary.append(spinner, label);
+        reasoning = document.createElement("div");
+        reasoning.className = "thinking-copy";
+        reasoning.setAttribute("aria-live", "polite");
+        details.append(summary, reasoning);
+        answer = document.createElement("div");
+        answer.className = "answer-copy";
+        answer.hidden = true;
+        bubble.append(details, answer);
+        thinkingPanel = details;
+        thinkingLabel = label;
+        thinkingSpinner = spinner;
+      } else {
+        bubble.textContent = text;
+      }
       turn.append(head, bubble);
       messagesEl.appendChild(turn);
       messagesEl.scrollTop = messagesEl.scrollHeight;
-      return { turn, bubble };
+      return { turn, bubble, answer, thinkingPanel, thinkingLabel, thinkingSpinner, reasoning };
+    }
+
+    function finishThinking(pending, elapsedSeconds, status = "complete") {
+      if (!pending.thinkingPanel) return;
+      const seconds = Number.isFinite(Number(elapsedSeconds)) ? Number(elapsedSeconds) : 0;
+      pending.thinkingSpinner.hidden = true;
+      if (status === "stopped") {
+        pending.thinkingLabel.textContent = `思考已停止 ${seconds.toFixed(1)} 秒`;
+      } else if (status === "incomplete") {
+        pending.thinkingLabel.textContent = `思考已截断 ${seconds.toFixed(1)} 秒`;
+      } else {
+        pending.thinkingLabel.textContent = `已思考 ${seconds.toFixed(1)} 秒`;
+      }
+      pending.thinkingPanel.open = false;
+      pending.answer.hidden = false;
     }
 
     async function typesetMath(bubble) {
@@ -1120,13 +1301,17 @@ HTML = r"""<!doctype html>
       if (!clean || busy) return;
       history.push({ role: "user", content: clean });
       if (imageData && imageTurn === null) imageTurn = history.length - 1;
-      addTurn("user", clean, imageTurn === history.length - 1);
+      const userTurn = addTurn("user", clean, imageTurn === history.length - 1);
       updateContextStatus();
       messageInput.value = "";
-      const pending = addTurn("assistant", "");
-      pending.bubble.classList.add("cursor");
-      currentBubble = pending.bubble;
-      currentText = "";
+      const thinkingRequested = byId("thinking").checked;
+      const pending = addTurn("assistant", "", false, thinkingRequested);
+      if (!thinkingRequested) pending.answer.classList.add("cursor");
+      let currentReasoning = "";
+      let currentAnswer = "";
+      let reasoningFinished = !thinkingRequested;
+      let reasoningIncomplete = false;
+      const localThinkingStartedAt = performance.now();
       controller = new AbortController();
       setBusy(true);
       setRuntime("generating", "busy");
@@ -1139,7 +1324,7 @@ HTML = r"""<!doctype html>
           body: JSON.stringify({
             messages: history,
             system_prompt: byId("systemPrompt").value,
-            thinking: byId("thinking").checked,
+            thinking: thinkingRequested,
             sampling: samplingPayload(),
             image_data: imageData,
             image_turn: imageTurn
@@ -1159,9 +1344,29 @@ HTML = r"""<!doctype html>
           for (const line of lines) {
             if (!line.trim()) continue;
             const event = JSON.parse(line);
-            if (event.type === "token") {
-              currentText += event.text;
-              pending.bubble.textContent = currentText;
+            if (event.type === "reasoning") {
+              currentReasoning += event.text;
+              pending.reasoning.textContent = currentReasoning;
+              messagesEl.scrollTop = messagesEl.scrollHeight;
+            } else if (event.type === "reasoning_done") {
+              reasoningFinished = true;
+              finishThinking(pending, event.seconds);
+              pending.answer.classList.add("cursor");
+              messagesEl.scrollTop = messagesEl.scrollHeight;
+            } else if (event.type === "reasoning_incomplete") {
+              reasoningFinished = true;
+              reasoningIncomplete = true;
+              finishThinking(pending, event.seconds, "incomplete");
+              messagesEl.scrollTop = messagesEl.scrollHeight;
+            } else if (event.type === "token") {
+              if (!reasoningFinished && pending.thinkingPanel) {
+                reasoningFinished = true;
+                finishThinking(pending, (performance.now() - localThinkingStartedAt) / 1000);
+              }
+              currentAnswer += event.text;
+              pending.answer.hidden = false;
+              pending.answer.classList.add("cursor");
+              pending.answer.textContent = currentAnswer;
               messagesEl.scrollTop = messagesEl.scrollHeight;
             } else if (event.type === "done") {
               doneMeta = event;
@@ -1170,34 +1375,61 @@ HTML = r"""<!doctype html>
             }
           }
         }
-        pending.bubble.classList.remove("cursor");
-        if (!currentText.trim()) throw new Error("The model returned an empty response.");
-        history.push({ role: "assistant", content: currentText.trim() });
+        pending.answer.classList.remove("cursor");
+        if (!currentAnswer.trim() && reasoningIncomplete) {
+          const incompleteAnswer = "未生成最终回答。请提高 Max new tokens 后重新生成。";
+          currentAnswer = incompleteAnswer;
+          pending.answer.hidden = false;
+          pending.answer.textContent = incompleteAnswer;
+        }
+        if (!currentAnswer.trim()) throw new Error("The model returned an empty response.");
+        history.push({ role: "assistant", content: currentAnswer.trim() });
         await typesetMath(pending.bubble);
         regenerateButton.disabled = false;
         updateContextStatus(doneMeta);
         setRuntime("ready", "ready");
       } catch (error) {
-        pending.bubble.classList.remove("cursor");
-        if (error.name === "AbortError") {
-          if (currentText.trim()) {
-            history.push({ role: "assistant", content: currentText.trim() });
-            pending.bubble.textContent = currentText.trim();
+        pending.answer.classList.remove("cursor");
+        if (error.name === "AbortError" && clearingConversation) {
+          setRuntime("ready", "ready");
+        } else if (error.name === "AbortError") {
+          if (currentAnswer.trim()) {
+            if (!reasoningFinished && pending.thinkingPanel) {
+              finishThinking(
+                pending,
+                (performance.now() - localThinkingStartedAt) / 1000,
+                "stopped"
+              );
+            }
+            history.push({ role: "assistant", content: currentAnswer.trim() });
+            pending.answer.textContent = currentAnswer.trim();
             await typesetMath(pending.bubble);
           } else {
-            history.pop();
-            pending.turn.remove();
+            const stoppedAnswer = "生成已停止，未得到最终回答。";
+            if (!reasoningFinished && pending.thinkingPanel) {
+              finishThinking(
+                pending,
+                (performance.now() - localThinkingStartedAt) / 1000,
+                "stopped"
+              );
+            }
+            pending.answer.hidden = false;
+            pending.answer.textContent = stoppedAnswer;
+            history.push({ role: "assistant", content: stoppedAnswer });
+            regenerateButton.disabled = false;
           }
           setRuntime("stopped", "ready");
         } else {
           history.pop();
           pending.turn.remove();
+          userTurn.turn.remove();
+          if (imageTurn !== null && imageTurn >= history.length) imageTurn = null;
           addTurn("error", String(error.message || error));
           setRuntime("generation failed", "error");
         }
         updateContextStatus();
       } finally {
-        currentBubble = null;
+        clearingConversation = false;
         controller = null;
         setBusy(false);
       }
@@ -1208,7 +1440,14 @@ HTML = r"""<!doctype html>
       if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); form.requestSubmit(); }
     });
     stopButton.addEventListener("click", () => { if (controller) controller.abort(); });
-    clearButton.addEventListener("click", () => { if (controller) controller.abort(); clearConversation(true); setRuntime("ready", "ready"); });
+    clearButton.addEventListener("click", () => {
+      if (controller) {
+        clearingConversation = true;
+        controller.abort();
+      }
+      clearConversation(true);
+      setRuntime("ready", "ready");
+    });
     regenerateButton.addEventListener("click", () => {
       if (busy || history.length < 2) return;
       const lastAnswer = history.pop();
@@ -1325,7 +1564,7 @@ def make_handler(engine: OpenAsterEngine):
             if not emit(serialize_event("start", model=engine.model_name, mode=engine.kind)):
                 return
             try:
-                for chunk in engine.stream(
+                chunks = engine.stream(
                     request.messages,
                     request.sampling,
                     image=request.image_bytes,
@@ -1333,8 +1572,12 @@ def make_handler(engine: OpenAsterEngine):
                     system_prompt=request.system_prompt,
                     thinking=request.thinking,
                     stop_event=stop_event,
+                )
+                for event in stream_generation_events(
+                    chunks,
+                    thinking=request.thinking,
                 ):
-                    if not emit(serialize_event("token", text=chunk)):
+                    if not emit(event):
                         return
                 result = engine.last_prompt_result
                 emit(

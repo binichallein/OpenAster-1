@@ -56,7 +56,7 @@ This recording runs the public `binichallein/OpenAster1-VL` checkpoint with a re
   <img src="assets/gui-text-thinking-demo.gif" alt="OpenAster1-4k-base text Thinking conversation" width="1000">
 </p>
 
-This recording runs the public `binichallein/OpenAster1-4k-base` checkpoint with Thinking enabled. The exact user prompt is `我想学习游泳，你能给我一些建议吗`.
+This recording runs the public `binichallein/OpenAster1-4k-base` checkpoint with Thinking enabled and `seed=0`. The exact user prompt is `我想学习游泳，你能给我一些建议吗`. Reasoning streams live, collapses into an elapsed-time disclosure when complete, and can be reopened while the final answer remains separate.
 
 #### Math Reasoning
 
