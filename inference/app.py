@@ -559,7 +559,6 @@ class OpenAsterEngine:
             raise errors.get()
 
 
-
 DEFAULT_GUI_MODEL = "binichallein/OpenAster1-VL"
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
 MAX_REQUEST_BYTES = 28 * 1024 * 1024
