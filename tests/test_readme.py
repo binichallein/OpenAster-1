@@ -3,6 +3,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 README = (ROOT / "README.md").read_text(encoding="utf-8")
+README_ZH_PATH = ROOT / "README_zh.md"
+README_ZH = README_ZH_PATH.read_text(encoding="utf-8") if README_ZH_PATH.exists() else ""
+
+
+def test_readmes_switch_language_above_project_links() -> None:
+    assert "[简体中文](./README_zh.md)" in README
+    assert "[English](./README.md)" in README_ZH
+    assert README.index("[简体中文](./README_zh.md)") < README.index("[Code]")
+    assert README_ZH.index("[English](./README.md)") < README_ZH.index("[代码]")
+
+
+def test_english_and_chinese_content_are_separate() -> None:
+    assert "## 中文说明" not in README
+    assert "OpenAster-1 是一个完全开源" not in README
+    assert "## 项目亮点" in README_ZH
+    assert "## 模型列表" in README_ZH
+    assert "## 推理" in README_ZH
 
 
 def test_readme_documents_text_and_vision_gui_commands() -> None:
